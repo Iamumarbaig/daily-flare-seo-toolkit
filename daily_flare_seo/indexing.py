@@ -21,6 +21,11 @@ def check_url(url: str) -> dict:
         return {"url": url, "error": str(exc)}
 
 
+def _is_xml_response(check: dict) -> bool:
+    content_type = (check.get("content_type") or "").lower()
+    return any(kind in content_type for kind in ("xml", "text/plain", "application/octet-stream"))
+
+
 def inspect_indexing_readiness(base_url: str) -> dict:
     base = base_url.rstrip("/")
     parsed = urlparse(base)
@@ -43,12 +48,20 @@ def inspect_indexing_readiness(base_url: str) -> dict:
     robots = checks["robots_txt"]
     if robots.get("status") != 200:
         findings.append({"severity": "warning", "check": "robots.txt", "message": "robots.txt was not returned with HTTP 200."})
+    elif robots.get("content_type") and "html" in robots["content_type"].lower():
+        findings.append({"severity": "warning", "check": "robots.txt", "message": "robots.txt returned HTML instead of a plain-text response; verify the endpoint is not being rewritten."})
     if robots.get("x_robots_tag") and "noindex" in robots["x_robots_tag"].lower():
         findings.append({"severity": "high", "check": "robots.txt", "message": "X-Robots-Tag contains noindex on robots.txt response."})
 
-    sitemap_ok = any(checks[k].get("status") == 200 for k in ("sitemap_xml", "wp_sitemap_xml", "sitemap_index_xml"))
+    sitemap_keys = ("sitemap_xml", "wp_sitemap_xml", "sitemap_index_xml")
+    sitemap_ok = any(checks[k].get("status") == 200 and _is_xml_response(checks[k]) for k in sitemap_keys)
     if not sitemap_ok:
-        findings.append({"severity": "high", "check": "sitemap", "message": "No checked sitemap endpoint returned HTTP 200."})
+        findings.append({"severity": "high", "check": "sitemap", "message": "No checked sitemap endpoint returned a valid HTTP 200 XML/text response."})
+    else:
+        for key in sitemap_keys:
+            check = checks[key]
+            if check.get("status") == 200 and not _is_xml_response(check):
+                findings.append({"severity": "warning", "check": key, "message": "Sitemap endpoint returned HTTP 200 but its content type does not look like XML/text; verify the response body."})
 
     for variant in checks["host_variants"]:
         if variant.get("status") in (200, 301, 302, 307, 308):
