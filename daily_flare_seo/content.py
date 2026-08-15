@@ -21,31 +21,6 @@ def keyword_counts(text: str, limit: int = 10) -> list[dict]:
     return [{"keyword": word, "count": count} for word, count in counts.most_common(limit)]
 
 
-def similarity(title_a: str, title_b: str) -> float:
-    a, b = set(tokens(title_a)), set(tokens(title_b))
-    if not a or not b:
-        return 0.0
-    return round(len(a & b) / len(a | b), 3)
-
-
-def duplicate_topic_candidates(pages: list[dict], threshold: float = 0.45) -> list[dict]:
-    results = []
-    valid = [p for p in pages if p.get("title")]
-    for i, page in enumerate(valid):
-        for other in valid[i + 1:]:
-            score = similarity(page["title"], other["title"])
-            if score >= threshold:
-                results.append({
-                    "url_a": page["url"],
-                    "title_a": page["title"],
-                    "url_b": other["url"],
-                    "title_b": other["title"],
-                    "similarity": score,
-                    "action": "review for overlapping topic/cannibalization",
-                })
-    return sorted(results, key=lambda x: x["similarity"], reverse=True)
-
-
 def internal_link_opportunities(pages: list[dict], limit: int = 5) -> list[dict]:
     opportunities = []
     for source in pages:
@@ -71,6 +46,5 @@ def content_intelligence(pages: list[dict]) -> dict:
     all_titles = " ".join(p.get("title", "") for p in pages)
     return {
         "top_site_terms": keyword_counts(all_titles),
-        "duplicate_topic_candidates": duplicate_topic_candidates(pages),
         "internal_link_opportunities": internal_link_opportunities(pages),
     }
