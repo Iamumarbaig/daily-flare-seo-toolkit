@@ -3,6 +3,10 @@ name: Toolkit Tests
 on:
   push:
   pull_request:
+  schedule:
+    # Frequent lab testing; GitHub may delay scheduled jobs during busy periods.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 jobs:
   test:
