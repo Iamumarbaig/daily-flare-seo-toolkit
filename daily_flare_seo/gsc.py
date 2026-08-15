@@ -60,17 +60,21 @@ def _aggregate(rows: list[dict], key: str) -> list[dict]:
 
 
 def summarize_pages(rows: list[dict]) -> list[dict]:
-    """Return page-level performance suitable for dashboards and opportunity ranking."""
     return _aggregate(rows, "page")
 
 
 def summarize_queries(rows: list[dict]) -> list[dict]:
-    """Return query-level performance suitable for dashboards and opportunity ranking."""
     return _aggregate(rows, "query")
 
 
+def _pct_delta(current: float, previous: float) -> float | None:
+    if previous == 0:
+        return None if current == 0 else 100.0
+    return round((current - previous) / abs(previous) * 100, 2)
+
+
 def compare_periods(current_rows: list[dict], previous_rows: list[dict], dimension: str = "page") -> list[dict]:
-    """Compare two GSC periods by page or query without inventing missing data."""
+    """Compare two GSC periods without inventing missing data."""
     if dimension not in {"page", "query"}:
         raise ValueError("dimension must be 'page' or 'query'")
     current = {r[dimension]: r for r in _aggregate(current_rows, dimension)}
@@ -84,12 +88,12 @@ def compare_periods(current_rows: list[dict], previous_rows: list[dict], dimensi
             "current": {k: cur[k] for k in METRIC_KEYS},
             "previous": {k: prev[k] for k in METRIC_KEYS},
             "delta": {k: cur[k] - prev[k] for k in METRIC_KEYS},
+            "percent_delta": {k: _pct_delta(cur[k], prev[k]) for k in METRIC_KEYS},
         })
     return sorted(result, key=lambda x: abs(x["delta"]["clicks"]) + abs(x["delta"]["impressions"]) / 100, reverse=True)
 
 
 def classify_movers(current_rows: list[dict], previous_rows: list[dict], dimension: str = "page", limit: int = 10) -> list[dict]:
-    """Rank observed winners and losers using GSC period deltas only."""
     comparisons = compare_periods(current_rows, previous_rows, dimension)
     movers = []
     for item in comparisons:
@@ -103,51 +107,55 @@ def classify_movers(current_rows: list[dict], previous_rows: list[dict], dimensi
 
 
 def find_ctr_opportunities(rows: list[dict], min_impressions: int = 20) -> list[GSCInsight]:
-    """Flag pages/queries with meaningful impressions but low CTR."""
+    """Prioritize low-CTR opportunities by observed search exposure."""
     out = []
     for r in normalize_rows(rows):
         if r["impressions"] < min_impressions or not r["query"]:
             continue
         if 1 <= r["position"] <= 12 and r["ctr"] < 0.03:
+            score = r["impressions"] * max(0.03 - r["ctr"], 0)
             out.append(GSCInsight(
                 kind="low-ctr",
-                severity="medium",
+                severity="high" if r["impressions"] >= 500 else "medium",
                 page=r["page"],
                 query=r["query"],
                 message="Query has meaningful impressions but a low CTR; review title and meta description.",
-                metrics={k: r[k] for k in METRIC_KEYS},
+                metrics={k: r[k] for k in METRIC_KEYS} | {"opportunity_score": round(score, 3)},
             ))
-    return out
+    return sorted(out, key=lambda i: i.metrics["opportunity_score"], reverse=True)
 
 
 def find_ranking_opportunities(rows: list[dict], min_impressions: int = 10) -> list[GSCInsight]:
-    """Find queries ranking roughly positions 4-20 where optimization may have upside."""
+    """Prioritize queries in positions 4-20 using observed impressions and ranking distance."""
     out = []
     for r in normalize_rows(rows):
         if r["impressions"] < min_impressions or not r["query"]:
             continue
         if 4 <= r["position"] <= 20:
+            score = r["impressions"] * max(20 - r["position"], 0) / 20
             out.append(GSCInsight(
                 kind="ranking-opportunity",
-                severity="medium",
+                severity="high" if r["position"] <= 10 and r["impressions"] >= 100 else "medium",
                 page=r["page"],
                 query=r["query"],
                 message="Query ranks outside the strongest top positions; consider improving relevance, internal links and on-page coverage.",
-                metrics={k: r[k] for k in METRIC_KEYS},
+                metrics={k: r[k] for k in METRIC_KEYS} | {"opportunity_score": round(score, 3)},
             ))
-    return out
+    return sorted(out, key=lambda i: i.metrics["opportunity_score"], reverse=True)
 
 
 def summarize(rows: list[dict]) -> dict:
     normalized = normalize_rows(rows)
     clicks = sum(r["clicks"] for r in normalized)
     impressions = sum(r["impressions"] for r in normalized)
+    opportunities = find_ctr_opportunities(rows) + find_ranking_opportunities(rows)
+    opportunities = sorted(opportunities, key=lambda i: i.metrics.get("opportunity_score", 0), reverse=True)
     return {
         "rows": len(normalized),
         "clicks": clicks,
         "impressions": impressions,
         "ctr": clicks / impressions if impressions else 0.0,
-        "opportunities": [i.__dict__ for i in find_ctr_opportunities(rows) + find_ranking_opportunities(rows)],
+        "opportunities": [i.__dict__ for i in opportunities],
         "pages": summarize_pages(rows),
         "queries": summarize_queries(rows),
     }
