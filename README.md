@@ -1,29 +1,39 @@
 # Daily Flare SEO Toolkit
 
-A safe, read-only SEO auditing toolkit for The Daily Flare (`thedailyflare.com`).
+A read-only SEO auditing toolkit for The Daily Flare (`thedailyflare.com`) with both a Python audit engine and a native WordPress dashboard plugin.
 
-## Current capabilities — v0.3
+## v1.0 WordPress plugin
 
-- Crawl a site or sitemap without making changes.
-- Audit page titles, meta descriptions, headings, canonical URLs, robots directives, links, and images.
-- Flag weak or missing image `alt` text and suspicious generated filenames.
-- Detect duplicate titles and meta descriptions.
-- Identify potential orphan pages within the audited URL set.
-- Suggest related internal-link targets.
-- Check `robots.txt` and common sitemap endpoints.
-- Check HTTP behavior of preferred and `www` host variants.
-- Produce a machine-readable JSON report.
-- Run reproducible audits through GitHub Actions.
+The repository root now contains `daily-flare-seo-toolkit.php`, an installable WordPress plugin. The plugin provides:
 
-## Indexing monitor
+- Daily Flare SEO dashboard inside WordPress Admin.
+- One-click read-only site audits.
+- Page title, meta description, canonical, robots and H1 checks.
+- Image ALT and generated/generic filename findings.
+- Internal-link diagnostics.
+- Duplicate title and meta-description detection.
+- Potential orphan-page detection within the audited URL set.
+- Sitemap and robots.txt diagnostics.
+- Preferred vs `www` host-variant checks.
+- Persistent JSON report stored in WordPress.
+- Page-level and finding-level report views.
+- Administrator-only REST endpoints for reports and audits.
+- Optional WordPress Abilities API registration for NIBWP-compatible installations.
+- A GitHub Actions workflow that validates PHP and builds an installable ZIP artifact.
 
-The indexing module checks **indexing readiness**, not claimed search-engine index status. HTTP checks alone cannot prove whether Google, Bing, or Yandex has indexed a URL. Definitive index status should come from the respective webmaster tools/APIs.
+## Installation
 
-## Safety
+1. Open the GitHub Actions workflow named **WordPress Plugin Package**.
+2. Download the artifact **daily-flare-seo-toolkit-wordpress-plugin**.
+3. In WordPress go to Plugins → Add New Plugin → Upload Plugin.
+4. Upload `daily-flare-seo-toolkit.zip` and activate it.
+5. Open **Daily Flare SEO** in WordPress Admin and run an audit.
 
-The toolkit is **read-only**. It does not publish, delete, rename, or modify anything on WordPress, Google Search Console, Bing, or Yandex.
+The plugin is intentionally read-only in v1.0. It does not publish, delete, rename, or modify posts, media, URLs, Google Search Console, Bing, or Yandex.
 
-## Quick start
+## Python engine
+
+The original Python engine remains available for reproducible audits and CI:
 
 ```bash
 python -m venv .venv
@@ -32,12 +42,12 @@ pip install -r requirements.txt
 python -m daily_flare_seo --url https://thedailyflare.com --max-pages 50 --output report.json
 ```
 
-The crawler follows the site's sitemap when available and stays on the same host.
+The crawler audits titles, meta descriptions, headings, canonicals, robots directives, links, images, indexing readiness, media recommendations and content/internal-link intelligence.
 
-## Planned next stages
+## Indexing monitor
 
-1. Connect the report to Google Search Console data.
-2. Add official Bing/Yandex webmaster API diagnostics where credentials and API access permit.
-3. Add WordPress Media Library metadata recommendations.
-4. Add stronger internal-link recommendations using page content, not only titles.
-5. Add optional, explicitly approved WordPress write operations.
+Indexing readiness is not the same thing as confirmed search-engine index status. HTTP checks cannot prove whether Google, Bing or Yandex has indexed a URL. Definitive index status must come from the relevant webmaster tools/APIs.
+
+## Safety
+
+Credentials are not stored in GitHub. The toolkit remains analysis-first and read-only. Any future WordPress write capability should be added as a separate, explicitly approved feature rather than silently modifying the site.
