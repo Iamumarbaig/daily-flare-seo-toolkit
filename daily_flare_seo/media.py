@@ -4,6 +4,8 @@ import re
 from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
 
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"}
+
 
 def filename_from_url(url: str) -> str:
     return PurePosixPath(unquote(urlparse(url).path)).name
@@ -15,10 +17,9 @@ def slugify(text: str) -> str:
 
 
 def suggested_filename(page_title: str, image_alt: str | None, image_url: str) -> str:
-    # Prefer a descriptive alt; otherwise fall back to the page title.
     base = slugify(image_alt or page_title or "daily-flare-image")
     ext = PurePosixPath(filename_from_url(image_url)).suffix.lower() or ".jpg"
-    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"}:
+    if ext not in IMAGE_EXTENSIONS:
         ext = ".jpg"
     return f"{base[:90].rstrip('-')}{ext}"
 
