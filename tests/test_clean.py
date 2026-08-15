@@ -66,6 +66,9 @@ def test_gsc_period_comparison_exposes_deltas():
     assert result[0]["delta"]["clicks"] == 5
     assert result[0]["delta"]["impressions"] == 50
     assert result[0]["delta"]["position"] == -2
+    assert result[0]["percent_delta"]["clicks"] == 50.0
+    assert result[0]["percent_delta"]["impressions"] == 50.0
+    assert result[0]["percent_delta"]["position"] == -33.33
 
 
 def test_gsc_classify_movers_ranks_observed_change():
@@ -81,3 +84,13 @@ def test_gsc_classify_movers_ranks_observed_change():
     assert movers[0]["page"] == "https://thedailyflare.com/a"
     assert movers[0]["direction"] == "up"
     assert movers[0]["delta"]["clicks"] == 10
+
+
+def test_gsc_opportunities_are_evidence_ranked():
+    rows = [
+        {"keys": ["high exposure", "https://thedailyflare.com/a"], "clicks": 5, "impressions": 1000, "ctr": 0.005, "position": 5},
+        {"keys": ["lower exposure", "https://thedailyflare.com/b"], "clicks": 1, "impressions": 100, "ctr": 0.01, "position": 8},
+    ]
+    result = summarize(rows)
+    assert result["opportunities"]
+    assert result["opportunities"][0]["metrics"]["opportunity_score"] > result["opportunities"][1]["metrics"]["opportunity_score"]
