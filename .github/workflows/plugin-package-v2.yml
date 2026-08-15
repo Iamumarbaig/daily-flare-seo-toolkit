@@ -1,0 +1,28 @@
+name: Package Daily Flare SEO Toolkit v2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PHP
+        run: php -l v2/daily-flare-seo-toolkit.php
+      - name: Build WordPress ZIP
+        run: |
+          rm -rf build daily-flare-seo-toolkit-v2.zip
+          mkdir -p build/daily-flare-seo-toolkit
+          cp v2/daily-flare-seo-toolkit.php build/daily-flare-seo-toolkit/
+          cp README.md build/daily-flare-seo-toolkit/
+          cd build
+          zip -r ../daily-flare-seo-toolkit-v2.zip daily-flare-seo-toolkit
+          cd ..
+          unzip -l daily-flare-seo-toolkit-v2.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daily-flare-seo-toolkit-v2
+          path: daily-flare-seo-toolkit-v2.zip
