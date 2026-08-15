@@ -10,8 +10,9 @@ import xml.etree.ElementTree as ET
 
 import requests
 from bs4 import BeautifulSoup
+from .indexing import inspect_indexing_readiness
 
-UA = "DailyFlareSEOToolkit/0.2 (+https://thedailyflare.com/)"
+UA = "DailyFlareSEOToolkit/0.3 (+https://thedailyflare.com/)"
 TIMEOUT = 15
 STOPWORDS = {"the", "and", "for", "with", "from", "that", "this", "will", "has", "have", "are", "was", "were", "into", "your", "their", "about", "after", "before", "over", "under", "what", "when", "where", "how", "why", "its", "daily", "flare", "news", "says", "said"}
 
@@ -179,10 +180,11 @@ def main():
     pages = [audit_page(u, host) for u in urls]
     issue_counts = Counter(issue for p in pages for issue in p.get("issues", []))
     intelligence = site_intelligence(pages)
-    issue_counts.update({"duplicate-titles": len(intelligence["duplicate_titles"]), "duplicate-meta-descriptions": len(intelligence["duplicate_meta_descriptions"]), "orphan-candidates": len(intelligence["orphan_candidates"]), "suspicious-image-filenames": len(intelligence["suspicious_image_filenames"])})
-    report = {"tool_version": "0.2.0", "site": base, "read_only": True, "sitemap_diagnostics": sitemap, "pages_audited": len(pages), "issue_counts": dict(issue_counts), "intelligence": intelligence, "pages": pages}
+    indexing = inspect_indexing_readiness(base)
+    issue_counts.update({"duplicate-titles": len(intelligence["duplicate_titles"]), "duplicate-meta-descriptions": len(intelligence["duplicate_meta_descriptions"]), "orphan-candidates": len(intelligence["orphan_candidates"]), "suspicious-image-filenames": len(intelligence["suspicious_image_filenames"]), "indexing-readiness-findings": len(indexing["findings"])})
+    report = {"tool_version": "0.3.0", "site": base, "read_only": True, "sitemap_diagnostics": sitemap, "indexing_readiness": indexing, "pages_audited": len(pages), "issue_counts": dict(issue_counts), "intelligence": intelligence, "pages": pages}
     with open(args.output, "w", encoding="utf-8") as f: json.dump(report, f, indent=2, ensure_ascii=False)
-    print(json.dumps({"pages_audited": len(pages), "issue_counts": dict(issue_counts), "output": args.output}, indent=2))
+    print(json.dumps({"pages_audited": len(pages), "issue_counts": dict(issue_counts), "indexing_findings": len(indexing["findings"]), "output": args.output}, indent=2))
 
 
 if __name__ == "__main__":
