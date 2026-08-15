@@ -1,0 +1,25 @@
+name: WordPress Plugin Package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PHP syntax
+        run: php -l daily-flare-seo-toolkit.php
+      - name: Build plugin ZIP
+        run: |
+          mkdir -p build/daily-flare-seo-toolkit
+          cp daily-flare-seo-toolkit.php build/daily-flare-seo-toolkit/
+          cp README.md build/daily-flare-seo-toolkit/
+          cd build
+          zip -r ../daily-flare-seo-toolkit.zip daily-flare-seo-toolkit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daily-flare-seo-toolkit-wordpress-plugin
+          path: daily-flare-seo-toolkit.zip
