@@ -14,7 +14,7 @@ from .content import content_intelligence
 from .indexing import inspect_indexing_readiness
 from .media import media_recommendation
 
-UA = "DailyFlareSEOToolkit/0.6 (+https://thedailyflare.com/)"
+UA = "DailyFlareSEOToolkit/0.6.1 (+https://thedailyflare.com/)"
 TIMEOUT = 15
 
 
@@ -71,23 +71,6 @@ def suspicious_filename(src: str) -> str | None:
         return "missing-filename"
     patterns = [r"^file[_-]?[a-z0-9]{6,}$", r"^(image|img|photo|picture)[_-]?[0-9a-z]{5,}$", r"^wp[_-]?[0-9]{5,}$", r"^dsc[_-]?[0-9]{4,}$", r"^pxl[_-]?[0-9]{4,}$", r"^[0-9]{5,}$", r"^[a-f0-9]{16,}$"]
     return "generated-or-generic-filename" if any(re.match(p, stem) for p in patterns) else None
-
-
-def related_pages(page: dict, pages: list[dict], limit: int = 5) -> list[dict]:
-    """Backward-compatible wrapper for the content intelligence linker."""
-    source = set(re.findall(r"[a-z0-9]{3,}", page.get("title", "").lower()))
-    stop = {"the", "and", "for", "with", "from", "that", "this", "will", "has", "have", "are", "was", "were", "into", "your", "their", "about", "after", "before", "over", "under", "what", "when", "where", "how", "why", "its", "news", "new", "more"}
-    source -= stop
-    ranked = []
-    for target in pages:
-        if target.get("url") == page.get("url") or not target.get("title"):
-            continue
-        terms = set(re.findall(r"[a-z0-9]{3,}", target["title"].lower())) - stop
-        overlap = source & terms
-        if overlap:
-            score = len(overlap) / max(1, len(source | terms))
-            ranked.append({"url": target["url"], "title": target["title"], "score": round(score, 3), "shared_terms": sorted(overlap)})
-    return sorted(ranked, key=lambda x: x["score"], reverse=True)[:limit]
 
 
 def audit_page(url: str, host: str) -> dict:
@@ -180,8 +163,8 @@ def main():
     indexing = inspect_indexing_readiness(base)
     media = [{"page": p["url"], "page_title": p.get("title", ""), "recommendation": media_recommendation(p.get("title", ""), image)} for p in pages for image in p.get("images", []) if image.get("issue") or image.get("filename_issue")]
     issue_counts = Counter(issue for p in pages for issue in p.get("issues", []))
-    issue_counts.update({"duplicate-titles": len(intelligence["duplicate_titles"]), "duplicate-meta-descriptions": len(intelligence["duplicate_meta_descriptions"]), "orphan-candidates": len(intelligence["orphan_candidates"]), "content-duplicate-topics": len(content["duplicate_topic_candidates"]), "internal-link-opportunities": len(content["internal_link_opportunities"]), "media-recommendations": len(media), "indexing-readiness-findings": len(indexing["findings"])})
-    report = {"tool_version": "0.6.0", "site": base, "read_only": True, "sitemap_diagnostics": sitemap, "indexing_readiness": indexing, "pages_audited": len(pages), "issue_counts": dict(issue_counts), "content_intelligence": content, "media_recommendations": media, "intelligence": intelligence, "pages": pages}
+    issue_counts.update({"duplicate-titles": len(intelligence["duplicate_titles"]), "duplicate-meta-descriptions": len(intelligence["duplicate_meta_descriptions"]), "orphan-candidates": len(intelligence["orphan_candidates"]), "internal-link-opportunities": len(content["internal_link_opportunities"]), "media-recommendations": len(media), "indexing-readiness-findings": len(indexing["findings"])})
+    report = {"tool_version": "0.6.1", "site": base, "read_only": True, "sitemap_diagnostics": sitemap, "indexing_readiness": indexing, "pages_audited": len(pages), "issue_counts": dict(issue_counts), "content_intelligence": content, "media_recommendations": media, "intelligence": intelligence, "pages": pages}
     with open(args.output, "w", encoding="utf-8") as f: json.dump(report, f, indent=2, ensure_ascii=False)
     print(json.dumps({"pages_audited": len(pages), "issue_counts": dict(issue_counts), "output": args.output}, indent=2))
 
