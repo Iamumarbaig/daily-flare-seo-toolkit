@@ -3,7 +3,7 @@ from __future__ import annotations
 from urllib.parse import urljoin, urlparse
 import requests
 
-UA = "DailyFlareSEOToolkit/0.3 (+https://thedailyflare.com/)"
+UA = "DailyFlareSEOToolkit/0.4 (+https://thedailyflare.com/)"
 TIMEOUT = 15
 
 
@@ -13,7 +13,13 @@ def check_url(url: str) -> dict:
         return {
             "url": url,
             "status": r.status_code,
+            "original_status": r.history[0].status_code if r.history else r.status_code,
             "final_url": r.url,
+            "redirect_count": len(r.history),
+            "redirect_chain": [
+                {"status": hop.status_code, "url": hop.url, "location": hop.headers.get("location")}
+                for hop in r.history
+            ],
             "content_type": r.headers.get("content-type", ""),
             "x_robots_tag": r.headers.get("x-robots-tag"),
         }
@@ -37,7 +43,6 @@ def inspect_indexing_readiness(base_url: str) -> dict:
     checks["wp_sitemap_xml"] = check_url(urljoin(base + "/", "wp-sitemap.xml"))
     checks["sitemap_index_xml"] = check_url(urljoin(base + "/", "sitemap_index.xml"))
 
-    # Check both canonical-host and alternate www/non-www variants without changing anything.
     preferred_host = parsed.netloc
     bare_host = preferred_host[4:] if preferred_host.startswith("www.") else preferred_host
     variant_hosts = [bare_host, f"www.{bare_host}"]
@@ -65,23 +70,30 @@ def inspect_indexing_readiness(base_url: str) -> dict:
 
     preferred_url = f"https://{preferred_host}/"
     for variant in checks["host_variants"]:
-        if variant.get("status") in (200, 301, 302, 307, 308):
-            final = variant.get("final_url", "")
-            if not final:
-                continue
-            final_host = urlparse(final).netloc
-            if final_host != preferred_host:
-                findings.append({
-                    "severity": "info",
-                    "check": "host-variant",
-                    "message": f"Host variant {variant['url']} resolves to {final}; verify the preferred canonical host is {preferred_url}.",
-                })
-            elif variant.get("url") != preferred_url and variant.get("status") == 200:
-                findings.append({
-                    "severity": "warning",
-                    "check": "host-variant",
-                    "message": f"Alternate host {variant['url']} returns HTTP 200 instead of redirecting to the preferred host {preferred_url}.",
-                })
+        if variant.get("status") not in (200, 301, 302, 307, 308):
+            continue
+        final = variant.get("final_url", "")
+        if not final:
+            continue
+        final_host = urlparse(final).netloc
+        if final_host != preferred_host:
+            findings.append({
+                "severity": "info",
+                "check": "host-variant",
+                "message": f"Host variant {variant['url']} resolves to {final}; verify the preferred canonical host is {preferred_url}.",
+            })
+        elif variant.get("url") != preferred_url and variant.get("redirect_count", 0) == 0 and variant.get("status") == 200:
+            findings.append({
+                "severity": "warning",
+                "check": "host-variant",
+                "message": f"Alternate host {variant['url']} returns HTTP 200 without redirecting to the preferred host {preferred_url}.",
+            })
+        elif variant.get("url") != preferred_url and variant.get("redirect_count", 0) > 1:
+            findings.append({
+                "severity": "info",
+                "check": "host-variant",
+                "message": f"Alternate host {variant['url']} reaches the preferred host after {variant['redirect_count']} redirects; consider reducing the redirect chain.",
+            })
 
     return {
         "site": base,
