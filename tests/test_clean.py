@@ -4,7 +4,7 @@ from daily_flare_seo.content import content_intelligence
 
 
 def test_version():
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.6.1"
 
 
 def test_detects_generic_image_filename():
