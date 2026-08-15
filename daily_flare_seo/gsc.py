@@ -88,6 +88,20 @@ def compare_periods(current_rows: list[dict], previous_rows: list[dict], dimensi
     return sorted(result, key=lambda x: abs(x["delta"]["clicks"]) + abs(x["delta"]["impressions"]) / 100, reverse=True)
 
 
+def classify_movers(current_rows: list[dict], previous_rows: list[dict], dimension: str = "page", limit: int = 10) -> list[dict]:
+    """Rank observed winners and losers using GSC period deltas only."""
+    comparisons = compare_periods(current_rows, previous_rows, dimension)
+    movers = []
+    for item in comparisons:
+        delta = item["delta"]
+        if delta["clicks"] == 0 and delta["impressions"] == 0 and delta["position"] == 0:
+            continue
+        direction = "up" if delta["clicks"] > 0 or delta["impressions"] > 0 or delta["position"] < 0 else "down"
+        impact = abs(delta["clicks"]) + abs(delta["impressions"]) / 100 + abs(delta["position"]) * 2
+        movers.append({**item, "direction": direction, "impact_score": round(impact, 3)})
+    return sorted(movers, key=lambda x: x["impact_score"], reverse=True)[:limit]
+
+
 def find_ctr_opportunities(rows: list[dict], min_impressions: int = 20) -> list[GSCInsight]:
     """Flag pages/queries with meaningful impressions but low CTR."""
     out = []
