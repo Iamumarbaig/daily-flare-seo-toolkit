@@ -23,7 +23,7 @@ def check_url(url: str) -> dict:
 
 def _is_xml_response(check: dict) -> bool:
     content_type = (check.get("content_type") or "").lower()
-    return any(kind in content_type for kind in ("xml", "text/plain", "application/octet-stream"))
+    return "xml" in content_type or "text/plain" in content_type
 
 
 def inspect_indexing_readiness(base_url: str) -> dict:
@@ -37,12 +37,12 @@ def inspect_indexing_readiness(base_url: str) -> dict:
     checks["wp_sitemap_xml"] = check_url(urljoin(base + "/", "wp-sitemap.xml"))
     checks["sitemap_index_xml"] = check_url(urljoin(base + "/", "sitemap_index.xml"))
 
-    variants = [
-        f"https://{parsed.netloc}/",
-        f"https://www.{parsed.netloc}/" if not parsed.netloc.startswith("www.") else None,
-    ]
-    variants = [v for v in variants if v]
-    checks["host_variants"] = [check_url(v) for v in dict.fromkeys(variants)]
+    # Check both canonical-host and alternate www/non-www variants without changing anything.
+    preferred_host = parsed.netloc
+    bare_host = preferred_host[4:] if preferred_host.startswith("www.") else preferred_host
+    variant_hosts = [bare_host, f"www.{bare_host}"]
+    variants = [f"https://{host}/" for host in dict.fromkeys(variant_hosts)]
+    checks["host_variants"] = [check_url(v) for v in variants]
 
     findings = []
     robots = checks["robots_txt"]
@@ -63,14 +63,24 @@ def inspect_indexing_readiness(base_url: str) -> dict:
             if check.get("status") == 200 and not _is_xml_response(check):
                 findings.append({"severity": "warning", "check": key, "message": "Sitemap endpoint returned HTTP 200 but its content type does not look like XML/text; verify the response body."})
 
+    preferred_url = f"https://{preferred_host}/"
     for variant in checks["host_variants"]:
         if variant.get("status") in (200, 301, 302, 307, 308):
             final = variant.get("final_url", "")
-            if final and urlparse(final).netloc != parsed.netloc:
+            if not final:
+                continue
+            final_host = urlparse(final).netloc
+            if final_host != preferred_host:
                 findings.append({
                     "severity": "info",
                     "check": "host-variant",
-                    "message": f"Host variant redirects to {final}; verify this matches the preferred canonical host.",
+                    "message": f"Host variant {variant['url']} resolves to {final}; verify the preferred canonical host is {preferred_url}.",
+                })
+            elif variant.get("url") != preferred_url and variant.get("status") == 200:
+                findings.append({
+                    "severity": "warning",
+                    "check": "host-variant",
+                    "message": f"Alternate host {variant['url']} returns HTTP 200 instead of redirecting to the preferred host {preferred_url}.",
                 })
 
     return {
