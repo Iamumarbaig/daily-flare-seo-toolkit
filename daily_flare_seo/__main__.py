@@ -10,9 +10,11 @@ import xml.etree.ElementTree as ET
 
 import requests
 from bs4 import BeautifulSoup
+from .content import content_intelligence
 from .indexing import inspect_indexing_readiness
+from .media import media_recommendation
 
-UA = "DailyFlareSEOToolkit/0.3 (+https://thedailyflare.com/)"
+UA = "DailyFlareSEOToolkit/0.5 (+https://thedailyflare.com/)"
 TIMEOUT = 15
 STOPWORDS = {"the", "and", "for", "with", "from", "that", "this", "will", "has", "have", "are", "was", "were", "into", "your", "their", "about", "after", "before", "over", "under", "what", "when", "where", "how", "why", "its", "daily", "flare", "news", "says", "said"}
 
@@ -115,7 +117,6 @@ def audit_page(url: str, host: str) -> dict:
         item = {"src": full_src, "alt": alt}
         if alt is None: item["issue"] = "missing-alt"
         elif not alt.strip(): item["issue"] = "empty-alt"
-        elif re.search(r"^(file|image|img|wp)[_-]?[0-9a-f]{6,}|^\d{5,}", alt.strip(), re.I): item["issue"] = "generated-looking-alt"
         filename_issue = suspicious_filename(full_src or "")
         if filename_issue: item["filename_issue"] = filename_issue
         images.append(item)
@@ -131,24 +132,6 @@ def audit_page(url: str, host: str) -> dict:
     return result
 
 
-def tokens(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]{3,}", text.lower()) if w not in STOPWORDS}
-
-
-def related_pages(page: dict, pages: list[dict], limit: int = 3) -> list[dict]:
-    base_tokens = tokens(page.get("title", ""))
-    if not base_tokens: return []
-    candidates = []
-    for other in pages:
-        if other["url"] == page["url"] or not other.get("title"): continue
-        other_tokens = tokens(other["title"])
-        overlap = base_tokens & other_tokens
-        if not overlap: continue
-        score = len(overlap) / max(1, len(base_tokens | other_tokens))
-        candidates.append({"url": other["url"], "title": other["title"], "score": round(score, 3)})
-    return sorted(candidates, key=lambda x: x["score"], reverse=True)[:limit]
-
-
 def site_intelligence(pages: list[dict]) -> dict:
     title_groups = defaultdict(list)
     desc_groups = defaultdict(list)
@@ -162,13 +145,11 @@ def site_intelligence(pages: list[dict]) -> dict:
     duplicate_titles = [{"title": key, "urls": urls} for key, urls in title_groups.items() if len(urls) > 1]
     duplicate_descriptions = [{"description": key, "urls": urls} for key, urls in desc_groups.items() if len(urls) > 1]
     orphan_candidates = [{"url": p["url"], "title": p.get("title", ""), "reason": "no incoming internal links within audited pages"} for p in pages if p.get("status") == 200 and incoming[p["url"]] == 0 and p is not pages[0]]
-    filename_issues = [{"page": p["url"], "image": i["src"], "issue": i["filename_issue"]} for p in pages for i in p.get("images", []) if i.get("filename_issue")]
-    recommendations = [{"source": p["url"], "suggested_targets": related_pages(p, pages), "reason": "page has no internal links; targets are ranked by title-token overlap"} for p in pages if p.get("status") == 200 and p.get("internal_link_count", 0) == 0]
-    return {"duplicate_titles": duplicate_titles, "duplicate_meta_descriptions": duplicate_descriptions, "orphan_candidates": orphan_candidates, "suspicious_image_filenames": filename_issues, "internal_link_recommendations": recommendations}
+    return {"duplicate_titles": duplicate_titles, "duplicate_meta_descriptions": duplicate_descriptions, "orphan_candidates": orphan_candidates}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Read-only SEO audit for Daily Flare")
+    parser = argparse.ArgumentParser(description="Read-only SEO and content intelligence audit for Daily Flare")
     parser.add_argument("--url", default="https://thedailyflare.com")
     parser.add_argument("--max-pages", type=int, default=50)
     parser.add_argument("--output", default="report.json")
@@ -178,13 +159,15 @@ def main():
     urls, sitemap = discover_urls(base, args.max_pages)
     if not urls: urls = [base]
     pages = [audit_page(u, host) for u in urls]
-    issue_counts = Counter(issue for p in pages for issue in p.get("issues", []))
     intelligence = site_intelligence(pages)
+    content = content_intelligence(pages)
     indexing = inspect_indexing_readiness(base)
-    issue_counts.update({"duplicate-titles": len(intelligence["duplicate_titles"]), "duplicate-meta-descriptions": len(intelligence["duplicate_meta_descriptions"]), "orphan-candidates": len(intelligence["orphan_candidates"]), "suspicious-image-filenames": len(intelligence["suspicious_image_filenames"]), "indexing-readiness-findings": len(indexing["findings"])})
-    report = {"tool_version": "0.3.0", "site": base, "read_only": True, "sitemap_diagnostics": sitemap, "indexing_readiness": indexing, "pages_audited": len(pages), "issue_counts": dict(issue_counts), "intelligence": intelligence, "pages": pages}
+    media = [{"page": p["url"], "page_title": p.get("title", ""), "recommendation": media_recommendation(p.get("title", ""), image)} for p in pages for image in p.get("images", []) if image.get("issue") or image.get("filename_issue")]
+    issue_counts = Counter(issue for p in pages for issue in p.get("issues", []))
+    issue_counts.update({"duplicate-titles": len(intelligence["duplicate_titles"]), "duplicate-meta-descriptions": len(intelligence["duplicate_meta_descriptions"]), "orphan-candidates": len(intelligence["orphan_candidates"]), "content-duplicate-topics": len(content["duplicate_topic_candidates"]), "internal-link-opportunities": len(content["internal_link_opportunities"]), "media-recommendations": len(media), "indexing-readiness-findings": len(indexing["findings"])})
+    report = {"tool_version": "0.5.0", "site": base, "read_only": True, "sitemap_diagnostics": sitemap, "indexing_readiness": indexing, "pages_audited": len(pages), "issue_counts": dict(issue_counts), "content_intelligence": content, "media_recommendations": media, "intelligence": intelligence, "pages": pages}
     with open(args.output, "w", encoding="utf-8") as f: json.dump(report, f, indent=2, ensure_ascii=False)
-    print(json.dumps({"pages_audited": len(pages), "issue_counts": dict(issue_counts), "indexing_findings": len(indexing["findings"]), "output": args.output}, indent=2))
+    print(json.dumps({"pages_audited": len(pages), "issue_counts": dict(issue_counts), "output": args.output}, indent=2))
 
 
 if __name__ == "__main__":
