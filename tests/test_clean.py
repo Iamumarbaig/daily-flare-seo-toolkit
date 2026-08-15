@@ -2,7 +2,7 @@ from daily_flare_seo import __version__
 from daily_flare_seo.__main__ import suspicious_filename
 from daily_flare_seo.content import content_intelligence
 from daily_flare_seo import indexing
-from daily_flare_seo.gsc import compare_periods, summarize
+from daily_flare_seo.gsc import classify_movers, compare_periods, summarize
 
 
 def test_version():
@@ -66,3 +66,18 @@ def test_gsc_period_comparison_exposes_deltas():
     assert result[0]["delta"]["clicks"] == 5
     assert result[0]["delta"]["impressions"] == 50
     assert result[0]["delta"]["position"] == -2
+
+
+def test_gsc_classify_movers_ranks_observed_change():
+    current = [
+        {"keys": ["alpha", "https://thedailyflare.com/a"], "clicks": 20, "impressions": 200, "position": 3},
+        {"keys": ["beta", "https://thedailyflare.com/b"], "clicks": 2, "impressions": 100, "position": 12},
+    ]
+    previous = [
+        {"keys": ["alpha", "https://thedailyflare.com/a"], "clicks": 10, "impressions": 100, "position": 6},
+        {"keys": ["beta", "https://thedailyflare.com/b"], "clicks": 4, "impressions": 100, "position": 10},
+    ]
+    movers = classify_movers(current, previous, "page")
+    assert movers[0]["page"] == "https://thedailyflare.com/a"
+    assert movers[0]["direction"] == "up"
+    assert movers[0]["delta"]["clicks"] == 10
