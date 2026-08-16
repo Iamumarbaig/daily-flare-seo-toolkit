@@ -1,1 +1,0 @@
-Temporary marker: duplicate-topic reporting is being removed and the test suite is being repaired.
